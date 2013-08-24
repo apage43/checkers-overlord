@@ -2,4 +2,5 @@
   :description "The Checkers with Crowds Overlord"
   :license {:name "The MIT License"
             :url "http://choosealicense.com/licenses/mit/"}
-  :dependencies [[org.clojure/clojure "1.5.1"]])
+  :dependencies [[org.clojure/clojure "1.5.1"]
+                 [cheshire "5.2.0"]])

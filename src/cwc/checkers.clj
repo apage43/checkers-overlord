@@ -1,5 +1,6 @@
 (ns cwc.checkers
-  "Checkers board and rules functions")
+  "Checkers board and rules functions"
+  (:require clojure.string))
 
 (def empty-board
   (->> (repeat 8 nil) vec
@@ -20,7 +21,7 @@
     [row col]))
 
 ;; The same, in reverse
-(def yx->pdn 
+(def yx->pdn
   (reduce (fn [mapping i]
             (assoc mapping (pdn->yx i) i))
           {} pdn-all))
@@ -32,8 +33,8 @@
 
 (def initial-board
   (-> empty-board
-      (fill :b 1 12)
-      (fill :r 21 32)))
+      (fill :r 1 12)
+      (fill :b 21 32)))
 
 (def king? #{:R :B})
 (def color {:r :r, :b :b, :R :r, :B :b})
@@ -41,7 +42,7 @@
 (defn dist [a b] (let [diff (- a b)] (if (neg? diff) (- diff) diff)))
 
 (defn forward? [from-color fy ty]
-  (if (= from-color :b)
+  (if (= from-color :r)
     (< fy ty)
     (> fy ty)))
 
@@ -62,27 +63,27 @@
       ;; destination cell must be empty
       (not to-cell)
       ;; moving piece must be a king, or moving forward
-      (or (king? from-cell) 
-          (forward? (color from-cell) fy ty)) 
+      (or (king? from-cell)
+          (forward? (color from-cell) fy ty))
       ;; And the move is either
-      (or 
+      (or
         ;; One space, diagonal
         (and (= (dist fy ty) 1)
              (= (dist fx tx) 1))
         ;; Or two spaces diagonal, a jump
-        (and 
+        (and
           (= (dist fy ty) 2)
           (= (dist fx tx) 2)
           (let [mid-pos [(/ (- tx fx) 2) (/ (- ty fy) 2)]
                 mid-cell (get-in board mid-pos)]
-            (and 
+            (and
               ;; A piece must occupy the midpoint
               mid-cell
               ;; and be of the opponent color.
               (not= (color mid-cell)
                     (color from-cell)))))))))
 
-(defn search-moves 
+(defn search-moves
   "Brute force search for possible moves"
   [board moving-color]
   (apply concat
@@ -95,7 +96,7 @@
                  :when (move-allowed? board from-yxpos to-yxpos)]
              [from-yxpos to-yxpos]))))
 
-(defn move->pdn [from to]
+(defn move->pdn [[from to]]
   "Formats move in Portable Draughts Notation (assumes move is valid.)"
   (let [pdn-f (yx->pdn from)
         pdn-t (yx->pdn to)]
@@ -104,17 +105,67 @@
     2 (str pdn-f "x" pdn-t)
     nil)))
 
+(defn path->compact-idx [path]
+  (let [[begin & more] (map #(map yx->pdn %) path)]
+    (vec (concat begin
+                 (map second more)))))
+
+(defn path->pdn [path]
+  (let [idxed (path->compact-idx path)]
+    (with-out-str
+      (loop [[head & more] idxed]
+        (if (first more)
+          (do
+            (print head)
+            (if (< 1 (dist (first (pdn->yx head))
+                           (first (pdn->yx (first more)))))
+              (print "x")
+              (print "-"))
+            (recur more))
+          (print head))))))
+
+(defn apply-move [board [from to]]
+  (-> board
+      (assoc-in from nil)
+      (assoc-in to (get-in board from))))
+
+(defn evaluate-moves
+  [board moving-color]
+  (let [first-pass (map vector (search-moves board moving-color))]
+    first-pass))
+
+(defn two-board-print [ba bb]
+  (let [pa (with-out-str (print-board ba))
+        pb (with-out-str (print-board bb))]
+    (doseq [toprint (map #(str %1 "     " %2)
+                           (clojure.string/split-lines pa)
+                           (clojure.string/split-lines pb))]
+        (println toprint))))
+
 (comment
+  (def cell-prettymap
+    {:b {:color :b
+         :king false}
+     :B {:color :r
+         :king true}
+     :r {:color :r
+         :king false}
+     :R {:color :R
+         :king true}})
+  (defn game-state [board currentplayer]
+    {:current-player currentplayer
+     :board (map (comp (partial get-in board) pdn->yx) pdn-all)
+     :allowed-moves
+     (mapv path->compact-idx (evaluate-moves board currentplayer))})
 
-  ;; boolean failure tracer
-  (defmacro f [expr]
-    `(let [res# ~expr]
-       (when-not res#
-         (println "failed:" (pr-str '~expr)))
-       res#))
+  (require '[cheshire.core :as json])
+  (let [pjson (json/generate-string (game-state initial-board :r) {:pretty true})]
+    (spit "sample.json" pjson)
+    (println pjson))
 
-  (map
-    (partial apply move->pdn)
-    (search-moves initial-board :b))
+  (let [board initial-board
+        player :r]
+    (doseq [m (evaluate-moves board player)]
+      (println (path->pdn m))))
 
   (print-board initial-board))

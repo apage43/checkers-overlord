@@ -1,4 +1,4 @@
-# cwc-overlord
+# checkers overlord
 
     checkers
     
