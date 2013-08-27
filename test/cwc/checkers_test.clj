@@ -17,3 +17,15 @@
   (testing "Move search finds all opening moves"
     (is (= #{"9-13" "9-14" "10-14" "10-15" "11-15" "11-16" "12-16"}
            (set (map path->pdn (evaluate-moves initial-board :r)))))))
+
+(deftest simple-jumps
+  (testing "Single jumps are found and forced"
+    (let [board (apply-pdns initial-board ["9-14" "23-18"])]
+      (is (= #{"14x23"}
+             (set (map path->pdn (evaluate-moves board :r))))))
+    (let [board (apply-pdns initial-board ["9-14" "23-18" "14x23"])]
+      (is (= #{"26x19" "27x18"}
+             (set (map path->pdn (evaluate-moves board :b))))))))
+
+(deftest double-jumps
+  (testing "Double jumps are found and forced"))

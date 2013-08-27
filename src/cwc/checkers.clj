@@ -46,6 +46,11 @@
     (< fy ty)
     (> fy ty)))
 
+(defn jump? [move]
+  (let [[[fy fx] [ty tx]] move]
+    (and (= (dist fy ty) 2)
+         (= (dist fx tx) 2))))
+
 (defn move-allowed?
   "Takes a board, from position and to position as [y x] pairs,
    (row before column since it corresponds with 2D array indexing, board[y][x])
@@ -72,9 +77,8 @@
              (= (dist fx tx) 1))
         ;; Or two spaces diagonal, a jump
         (and
-          (= (dist fy ty) 2)
-          (= (dist fx tx) 2)
-          (let [mid-pos [(/ (- tx fx) 2) (/ (- ty fy) 2)]
+          (jump? [from to])
+          (let [mid-pos [(/ (+ ty fy) 2) (/ (+ tx fx) 2)]
                 mid-cell (get-in board mid-pos)]
             (and
               ;; A piece must occupy the midpoint
@@ -83,11 +87,34 @@
               (not= (color mid-cell)
                     (color from-cell)))))))))
 
+(defn path->compact-idx [path]
+  (let [[begin & more] (map #(map yx->pdn %) path)]
+    (vec (concat begin
+                 (map second more)))))
+
+(defn apply-move [board [from to]]
+  (-> board
+      (assoc-in from nil)
+      (assoc-in to (get-in board from))))
+
+(defn apply-path [board path & {:keys [jumps] :or {jumps true}}]
+  (let [moved (reduce apply-move board path)
+        jumps (filter jump? path)]
+    (if-not jumps moved
+      ;; Remove jumped pieces
+      (reduce (fn [board jump]
+                (let [[[fy fx] [ty tx]] jump
+                      mid-y (/ (+ fy ty) 2)
+                      mid-x (/ (+ fx tx) 2)
+                      mid [mid-y mid-x]]
+                  (assoc-in board mid nil)))
+              moved jumps))))
+
 (defn search-moves
-  "Brute force search for possible moves"
-  [board moving-color]
+  "Search for possible moves"
+  [board moving-color & [eligible-cells]]
   (apply concat
-         (for [pos pdn-all
+         (for [pos (or eligible-cells pdn-all)
                :let [from-yxpos (pdn->yx pos)
                      from-cell (get-in board from-yxpos)]
                :when (= moving-color (color from-cell))]
@@ -95,6 +122,29 @@
                  :let [to-yxpos (pdn->yx pos)]
                  :when (move-allowed? board from-yxpos to-yxpos)]
              [from-yxpos to-yxpos]))))
+
+(defn extend-jumpchains [board moving-color paths]
+  (let [jumpends (filter (comp jump? last) paths)
+        ;; Extend any chains that can be extended
+        jumpends (apply concat
+                        (for [path jumpends
+                              :let [final-cell (last (path->compact-idx path))
+                                    ;; Don't removed jumped pieces here
+                                    partial-board (apply-path board path :jumps false)
+                                    next-moves (search-moves board moving-color [final-cell])]]
+                          (if (seq next-moves)
+                            (mapv (fn [next-move]
+                                    (vec (concat path next-move)))
+                                  next-moves)
+                            [path])))]
+    (if (and (seq jumpends) (not= jumpends paths))
+      (extend-jumpchains board moving-color jumpends)
+      paths)))
+
+(defn evaluate-moves
+  [board moving-color]
+  (let [first-pass (map vector (search-moves board moving-color))]
+    (extend-jumpchains board moving-color first-pass)))
 
 (defn move->pdn [[from to]]
   "Formats move in Portable Draughts Notation (assumes move is valid.)"
@@ -104,11 +154,6 @@
     1 (str pdn-f "-" pdn-t)
     2 (str pdn-f "x" pdn-t)
     nil)))
-
-(defn path->compact-idx [path]
-  (let [[begin & more] (map #(map yx->pdn %) path)]
-    (vec (concat begin
-                 (map second more)))))
 
 (defn path->pdn [path]
   (let [idxed (path->compact-idx path)]
@@ -124,15 +169,12 @@
             (recur more))
           (print head))))))
 
-(defn apply-move [board [from to]]
-  (-> board
-      (assoc-in from nil)
-      (assoc-in to (get-in board from))))
-
-(defn evaluate-moves
-  [board moving-color]
-  (let [first-pass (map vector (search-moves board moving-color))]
-    first-pass))
+(defn pdn->path [pdn]
+  (let [parts (clojure.string/split pdn #"[x\-]")
+        pdns (map read-string parts)
+        pdn-path (partition 2 1 pdns)
+        path (mapv (partial mapv pdn->yx) pdn-path)]
+    path))
 
 (defn two-board-print [ba bb]
   (let [pa (with-out-str (print-board ba))
@@ -142,7 +184,13 @@
                            (clojure.string/split-lines pb))]
         (println toprint))))
 
+(defn apply-pdns [board pdns]
+  (reduce (fn [board pdn]
+            (apply-path board (pdn->path pdn)))
+          board pdns))
+
 (comment
+
   (def cell-prettymap
     {:b {:color :b
          :king false}
@@ -154,7 +202,7 @@
          :king true}})
   (defn game-state [board currentplayer]
     {:current-player currentplayer
-     :board (map (comp (partial get-in board) pdn->yx) pdn-all)
+     :board (map (comp cell-prettymap (partial get-in board) pdn->yx) pdn-all)
      :allowed-moves
      (mapv path->compact-idx (evaluate-moves board currentplayer))})
 
@@ -163,9 +211,24 @@
     (spit "sample.json" pjson)
     (println pjson))
 
-  (let [board initial-board
-        player :r]
+  (use 'clojure.pprint)
+  (pprint (evaluate-moves initial-board :r))
+
+  (let [board (apply-pdns initial-board ["9-14" "23-18" "14x23"])
+        player :b]
+    (print-board board)
+    (println)
     (doseq [m (evaluate-moves board player)]
-      (println (path->pdn m))))
+      (println (path->pdn m))
+      (two-board-print board (apply-path board m))
+      (println)))
+
+  (print-board (apply-path initial-board (pdn->path "9-14")))
+
+  (let [board initial-board]
+    (-> board
+        (apply-pdns ["9-14"
+                     "23-18"])
+        print-board))
 
   (print-board initial-board))
