@@ -86,6 +86,10 @@
                        piece (if-not (:captured piece)
                                (by-mover (:location piece)) [])))]
     (-> game vectify
+        (as-> game
+          (if (= 0 (count moves))
+            (assoc game :winningTeam (opponent curteam))
+            game))
         (assoc-in [:teams curteam :pieces] (vec new-pieces)))))
 
 (defn apply-move [game vote]
@@ -141,5 +145,4 @@
                                        (catch Exception e nil))))
                    :headers {"Content-Type" "application/json"}})))
   (require '[clj-http.client :as http])
-  (println (slurp "game-sample.json"))
-  )
+  (println (slurp "game-sample.json")))

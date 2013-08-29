@@ -39,14 +39,17 @@
   (let [docurl (or (first args) "http://localhost:4984/checkers/game-1")
         duration (or (some->> (second args) read-string) 10)]
     (force-put docurl (data/initial-game 1 duration))
-    (loop [game (data/initial-game 1 duration)
-           movenum 1
-           [move & more] samplegame]
-      (let [updated (-> game
-                        (data/apply-move (pdn->vote game move))
-                        data/affix-moves)]
-        (force-put docurl updated)
-        (Thread/sleep (* 1000 duration))
-        (when more (recur updated (inc movenum) more))))
+    (let [finalgame
+          (loop [game (data/initial-game 1 duration)
+                 movenum 1
+                 [move & more] samplegame]
+            (let [updated (-> game
+                              (data/apply-move (pdn->vote game move))
+                              data/affix-moves)]
+              (force-put docurl updated)
+              (Thread/sleep (* 1000 duration))
+              (if more (recur updated (inc movenum) more)
+                updated)))]
+      (force-put docurl (assoc finalgame :winningTeam 0)))
     (println "Done.")))
 
