@@ -169,12 +169,22 @@
             (recur more))
           (print head))))))
 
+(defn- dir [f t] (if (neg? (- t f)) -1 1))
+
 (defn pdn->path [pdn]
   (let [parts (clojure.string/split pdn #"[x\-]")
         pdns (map read-string parts)
         pdn-path (partition 2 1 pdns)
         path (mapv (partial mapv pdn->yx) pdn-path)]
-    path))
+    (apply concat
+           (for [[[fy fx] [ty tx] :as hop] path]
+             (if (< 2 (dist fy ty))
+               (let [xv (* 2 (dir fx tx))
+                     yv (* 2 (dir fy ty))]
+                 (for [n (range (/ (dist fy ty) 2))]
+                   [[(+ fy (* n yv)) (+ fx (* n xv))]
+                    [(+ fy (* (inc n) yv)) (+ fx (* (inc n) xv))]]))
+               [hop])))))
 
 (defn two-board-print [ba bb]
   (let [pa (with-out-str (print-board ba))
@@ -188,6 +198,15 @@
   (reduce (fn [board pdn]
             (apply-path board (pdn->path pdn)))
           board pdns))
+
+(defn captures [pdnpath]
+  (let [locs (map pdn->yx pdnpath)
+        hops (partition 2 1 locs)]
+    (for [hop hops
+          :let [[[fy fx] [ty tx]] hop
+                mid [(/ (+ fy ty) 2) (/ (+ fx tx) 2)]]
+          :when (jump? hop)]
+      (yx->pdn mid))))
 
 (comment
 
