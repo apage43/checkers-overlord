@@ -98,7 +98,7 @@
         path (vec (concat [moverloc] locations))
         opponent-by-loc (piece-location-index game (opponent team))]
     (-> game vectify
-        (assoc :moves (conj (:moves game) vote))
+        (assoc :moves (conj (:moves game) (assoc vote :locations path)))
         (assoc :activeTeam (opponent team))
         (assoc :moveDeadline (tc/to-date (t/plus (t/now) (t/seconds (:moveInterval game)))))
         (update-in [:turn] inc)
