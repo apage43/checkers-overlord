@@ -60,6 +60,13 @@
               :pieces (->> (map vector (range)) ; Important to add indices *before* filtering
                            (filter (comp not :captured second)))))) ; captures
 
+(defn vectify
+  [game]
+  (-> game
+      (update-in [:teams] vec)
+      (update-in [:teams 0 :pieces] vec)
+      (update-in [:teams 1 :pieces] vec)))
+
 (defn affix-moves [game]
   (let [board (game-board game)
         curteam (:activeTeam game)
@@ -76,9 +83,9 @@
                                                                       {:piece (opponent-by-loc c)
                                                                        :team (opponent curteam)})
                                                           :king (kinged? curteam move)}]}))
-                       piece (by-mover (:location piece))))]
-    (-> game
-        (update-in [:teams] vec)
+                       piece (if-not (:captured piece)
+                               (by-mover (:location piece)) [])))]
+    (-> game vectify
         (assoc-in [:teams curteam :pieces] (vec new-pieces)))))
 
 (defn apply-move [game vote]
@@ -86,13 +93,11 @@
         moverloc (-> game :teams (nth team) :pieces (nth piece) :location)
         path (vec (concat [moverloc] locations))
         opponent-by-loc (piece-location-index game (opponent team))]
-    (-> game
-        (update-in [:teams] vec)
-        (update-in [:teams team :pieces] vec)
-        (update-in [:teams (opponent team) :pieces] vec)
-        (update-in [:moves] conj vote)
-        (assoc-in [:activeTeam] (opponent team))
-        (assoc-in [:moveDeadline] (tc/to-date (t/plus (t/now) (t/seconds (:moveInterval game)))))
+    (-> game vectify
+        (assoc :moves (conj (:moves game) vote))
+        (assoc :activeTeam (opponent team))
+        (assoc :moveDeadline (tc/to-date (t/plus (t/now) (t/seconds (:moveInterval game)))))
+        (update-in [:turn] inc)
         (as-> game
           (reduce (fn [game captureloc]
                     (if-let [opidx (opponent-by-loc captureloc)]
