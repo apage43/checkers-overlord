@@ -41,4 +41,3 @@ may or may not be up to date:
 
 <http://s3.crate.im/cwc-overlord.jar>
 
-

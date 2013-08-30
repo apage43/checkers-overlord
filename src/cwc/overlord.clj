@@ -17,6 +17,7 @@
 (def game (atom nil))
 (def cfg (atom {:seq 0}))
 (def votes (atom {}))
+(def votes-doc (atom {}))
 (def usercounters (atom {:teams [0 0]}))
 
 ;;; lifted from newer urly
@@ -36,19 +37,26 @@
     nil))
 
 (defn db-put [doc k]
-  (let [docuri (str (urly/resolve (:db @cfg) (encode-path k)))
-        pres (:body (http/put docuri {:as :json
-                                      :body (json/generate-string doc)
-                                      :headers {"Content-Type" "application/json"}}))]
-    (assoc doc :_rev (:rev pres))))
+  (loop [getrev false]
+    (or (try
+          (let [docuri (str (urly/resolve (:db @cfg) (encode-path k)))
+                doc (if-not getrev doc (assoc doc :_rev (:_rev (db-get k) "")))
+                pres (:body (http/put docuri {:as :json
+                                              :body (json/generate-string doc)
+                                              :headers {"Content-Type" "application/json"}}))]
+            (assoc doc :_rev (:rev pres)))
+          (catch Exception _e nil))
+        (recur true))))
 
 (defn ref->db [theref id]
   (add-watch theref ::store-db
              (fn [_key theref oldv newv]
                ;; Update did not change rev
                (when (= (:_rev oldv) (:_rev newv))
-                 (println "Sending new game state...")
+                 (println "Sending new state for" id)
                  (swap! theref db-put id)))))
+
+(declare votes-update)
 
 (defn tally-vote [vote]
   (println "Considering vote:" (pr-str vote))
@@ -57,7 +65,8 @@
     (if (and (= (:number @game) (:game vote))
              (= (:turn @game) turn))
       (do (println "Vote is OK, counting")
-          (swap! votes (fn [m] (merge-with + m {votepart 1}))))
+          (swap! votes (fn [m] (merge-with + m {votepart 1})))
+          (votes-update))
       (println "Vote was for wrong turn or game."))))
 
 (defn schedule-move [f]
@@ -113,6 +122,19 @@
   (println "Updating user counts" @usercounters)
   (swap! game add-usercounters))
 
+(defn votes-update []
+  (println "Updating vote totals")
+  (swap! votes-doc merge
+         {:game (:number @game)
+          :turn (:turn @game)
+          :team (:activeTeam @game)
+          :count (reduce + (vals @votes))
+          :moves (->> @votes (sort-by val) reverse (take 3)
+                      (map (fn [[vote votecount]]
+                              (assoc
+                                (-> @game (data/apply-move vote) :moves last)
+                                :count votecount))))}))
+
 (defn -main [& args]
   (let [[opts args usage]
         (cli args
@@ -129,14 +151,15 @@
     (reset! game (-> (data/initial-game 1 interval)
                      (assoc :number (rand-int 999999))
                      data/affix-moves))
+    (swap! game assoc :_rev (or (:_rev (db-get "votes")) ""))
     ;; Start syncing game to DB
     (ref->db game "game-1")
-    ;; Grab the ref of the doc currently in DB
-    (swap! game assoc :_rev (or (:_rev (db-get "game-1")) ""))
+    (reset! votes-doc  {:game 0 :turn 0 :team 0 :count 0 :moves []})
+    (ref->db votes-doc "votes")
     (swap! game db-put "game-1")
     ;; Start watching the changes stream
     (.start (Thread. stream-watch))
     ;; Set up job to apply ovtes
     (schedule-move apply-votes)
     ;; Periodically update the team counts
-    (at-/every 30000 counter-update :desc "Counter-update" :fixed-delay true)))
+    (at-/every 30000 counter-update pool :desc "Update player count" :fixed-delay true)))
