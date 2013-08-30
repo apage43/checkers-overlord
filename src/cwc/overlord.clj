@@ -84,6 +84,7 @@
     (do (println "Most popular vote was:" (pr-str most-pop))
         (reset! votes {})
         (swap! game (fn [g] (-> g
+                                add-usercounters
                                 (data/apply-move most-pop)
                                 (data/affix-moves)))))
     ;else
@@ -117,10 +118,6 @@
           (tally-vote (db-get id))))))
   (println "Changes feed dropped! Restarting... (at seq.." (:seq @cfg) ")")
   (recur))
-
-(defn counter-update []
-  (println "Updating user counts" @usercounters)
-  (swap! game add-usercounters))
 
 (defn votes-update []
   (println "Updating vote totals")
@@ -160,6 +157,4 @@
     ;; Start watching the changes stream
     (.start (Thread. stream-watch))
     ;; Set up job to apply ovtes
-    (schedule-move apply-votes)
-    ;; Periodically update the team counts
-    (at-/every 30000 counter-update pool :desc "Update player count" :fixed-delay true)))
+    (schedule-move apply-votes)))
