@@ -28,4 +28,8 @@
              (set (map path->pdn (evaluate-moves board :b))))))))
 
 (deftest double-jumps
-  (testing "Double jumps are found and forced"))
+  (testing "Double jumps are found and forced")
+  (let [board (apply-pdns initial-board ["9-14" "24-20" "5-9" "28-24" "9-13"
+                                         "32-28" "6-9" "24-19" "14-18"])]
+    (is (= #{"23x14x5" "22x15x6"}
+           (set (map path->pdn (evaluate-moves board :b)))))))

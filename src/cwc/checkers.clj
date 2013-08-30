@@ -123,6 +123,11 @@
                  :when (move-allowed? board from-yxpos to-yxpos)]
              [from-yxpos to-yxpos]))))
 
+(defmacro spy [form]
+  `(let [ret# ~form]
+     (println (pr-str '~form) "=>" (pr-str ret#))
+     ret#))
+
 (defn extend-jumpchains [board moving-color paths]
   (let [jumpends (filter (comp jump? last) paths)
         ;; Extend any chains that can be extended
@@ -131,11 +136,12 @@
                               :let [final-cell (last (path->compact-idx path))
                                     ;; Don't removed jumped pieces here
                                     partial-board (apply-path board path :jumps false)
-                                    next-moves (search-moves board moving-color [final-cell])]]
+                                    next-moves (search-moves partial-board moving-color
+                                                             [final-cell])
+                                    next-moves (filter jump? next-moves)
+                                    ]]
                           (if (seq next-moves)
-                            (mapv (fn [next-move]
-                                    (vec (concat path next-move)))
-                                  next-moves)
+                            (mapv (fn [next-move] (conj (vec path) next-move)) next-moves)
                             [path])))]
     (if (and (seq jumpends) (not= jumpends paths))
       (extend-jumpchains board moving-color jumpends)
@@ -169,7 +175,7 @@
             (recur more))
           (print head))))))
 
-(defn- dir [f t] (if (neg? (- t f)) -1 1))
+(defn dir [f t] (if (neg? (- t f)) -1 1))
 
 (defn pdn->path [pdn]
   (let [parts (clojure.string/split pdn #"[x\-]")
@@ -244,10 +250,13 @@
 
   (print-board (apply-path initial-board (pdn->path "9-14")))
 
-  (let [board initial-board]
+  (let [board initial-board player :b]
     (-> board
-        (apply-pdns ["9-14"
-                     "23-18"])
-        print-board))
+        (apply-pdns [ "9-14" "24-20" "5-9" "28-24" "9-13" "32-28" "6-9" "24-19" "14-18"])
+        (as-> board
+          (do (print-board board)
+              (doseq [m (evaluate-moves board player)]
+                (println (path->pdn m)))))))
 
   (print-board initial-board))
+
