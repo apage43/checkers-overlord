@@ -2,7 +2,7 @@
   :description "The Checkers with Crowds Overlord"
   :license {:name "The MIT License"
             :url "http://choosealicense.com/licenses/mit/"}
-  :aot [cwc.pretend cwc.overlord]
+  :profiles {:uberjar {:aot [cwc.pretend cwc.overlord]}}
   :main cwc.overlord
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [org.clojure/tools.cli "0.2.4"]
