@@ -1,7 +1,7 @@
 (ns cwc.overlord
   (:gen-class)
   (:import [java.net URL URLEncoder]
-           java.util.Date)
+           [java.util Date UUID])
   (:require [clj-http.client :as http]
             [flatland.useful.exception :refer [rescue]]
             [cheshire.core :as json]
@@ -19,6 +19,8 @@
 (def votes (atom {}))
 (def votes-doc (atom {}))
 (def usercounters (atom {:teams [0 0]}))
+
+(defn make-gameid [] (str (UUID/randomUUID)))
 
 ;;; lifted from newer urly
 (defn ^String encode-path
@@ -47,6 +49,15 @@
             (assoc doc :_rev (:rev pres)))
           (catch Exception _e nil))
         (recur true))))
+
+(defn db-kill [change]
+  (rescue
+    (let [{:keys [id changes deleted]} change
+          rev (some-> changes first :rev)
+          docuri (str (urly/resolve (:db @cfg) (encode-path id)))]
+      ;; Don't delete already deleted docs
+      (when-not deleted
+        (http/delete docuri {:query-params {:rev rev}}))) nil))
 
 (defn ref->db [theref id]
   (add-watch theref ::store-db
@@ -81,8 +92,16 @@
 (declare apply-votes)
 
 (defn start-new-game []
+  (let [gameid (make-gameid)]
+    (swap! cfg assoc :game-docid (str "game:" gameid))
+    (swap! cfg assoc :votes-docid (str "votes:" gameid)))
+  (remove-watch game ::store-db)
+  (remove-watch votes-doc ::store-db)
+  (ref->db game (:game-docid @cfg))
+  (ref->db votes-doc (:votes-docid @cfg))
   (reset! usercounters {:teams [0 0]})
   (reset! game (-> (data/initial-game 1 (:interval @cfg))
+                   (assoc :votesDoc (:votes-docid @cfg))
                    (assoc :number (rand-int 999999))
                    data/affix-moves))
   (schedule-move apply-votes))
@@ -125,6 +144,12 @@
             id (:id change)]
         (println "Got change:" (pr-str change))
         (swap! cfg assoc :seq (:seq change))
+        ;; Delete old game docs
+        (when (= id "game-1") (db-kill change))
+        (when (and id (.startsWith id "game:")
+                   (not (= id (:game-docid @cfg))))
+          (db-kill change))
+
         (when (and id (.startsWith id "user:"))
           (count-user (db-get id)))
         (when (and id (.startsWith id "vote:"))
@@ -157,14 +182,10 @@
     (when (or help (not db-url))
       (println usage)
       (System/exit 1))
-    (swap! cfg assoc :db db-url)
+    (swap! cfg assoc :db (if (.endsWith db-url "/") db-url (str db-url "/")))
     (swap! cfg assoc :interval interval)
-    (start-new-game)
-    (swap! game assoc :_rev (or (:_rev (db-get "votes")) ""))
-    ;; Start syncing game to DB
-    (ref->db game "game-1")
     (reset! votes-doc  {:game 0 :turn 0 :team 0 :count 0 :moves []})
-    (ref->db votes-doc "votes")
-    (swap! game db-put "game-1")
+    (start-new-game)
+    (swap! game db-put (:game-docid @cfg))
     ;; Start watching the changes stream
     (.start (Thread. stream-watch))))
