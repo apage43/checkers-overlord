@@ -78,6 +78,14 @@
       (assoc-in [:teams 0 :participantCount] (get-in @usercounters [:teams 0]))
       (assoc-in [:teams 1 :participantCount] (get-in @usercounters [:teams 1]))))
 
+(declare apply-votes)
+
+(defn start-new-game []
+  (reset! game (-> (data/initial-game 1 (:interval @cfg))
+                   (assoc :number (rand-int 999999))
+                   data/affix-moves))
+  (schedule-move apply-votes))
+
 (defn apply-votes []
   (println "Time's up, applying votes!")
   (if-let [most-pop (some->> @votes (sort-by val) last key)]
@@ -91,7 +99,10 @@
     (do (println "No votes were cast! Resetting timer.")
         (swap! game assoc :moveDeadline
                (tc/to-date (t/plus (t/now) (t/seconds (:moveInterval @game)))))))
-  (schedule-move apply-votes))
+  (if-not (:winningTeam @game)
+    (schedule-move apply-votes)
+    ;; Wait one round-length, and restart
+    (schedule-move start-new-game)))
 
 
 (defn count-user [user]
@@ -145,9 +156,8 @@
       (println usage)
       (System/exit 1))
     (swap! cfg assoc :db db-url)
-    (reset! game (-> (data/initial-game 1 interval)
-                     (assoc :number (rand-int 999999))
-                     data/affix-moves))
+    (swap! cfg assoc :interval interval)
+    (start-new-game)
     (swap! game assoc :_rev (or (:_rev (db-get "votes")) ""))
     ;; Start syncing game to DB
     (ref->db game "game-1")
@@ -155,6 +165,4 @@
     (ref->db votes-doc "votes")
     (swap! game db-put "game-1")
     ;; Start watching the changes stream
-    (.start (Thread. stream-watch))
-    ;; Set up job to apply ovtes
-    (schedule-move apply-votes)))
+    (.start (Thread. stream-watch))))
