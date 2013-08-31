@@ -81,6 +81,7 @@
 (declare apply-votes)
 
 (defn start-new-game []
+  (reset! usercounters {:teams [0 0]})
   (reset! game (-> (data/initial-game 1 (:interval @cfg))
                    (assoc :number (rand-int 999999))
                    data/affix-moves))
@@ -107,7 +108,8 @@
 
 (defn count-user [user]
   (println "Saw user doc: " (pr-str user))
-  (when (some-> user :team number?)
+  (when (and (some-> user :team number?)
+             (= (:number @game) (some-> user :game)))
     (swap! usercounters update-in [:teams (:team user)] (fnil inc 0))
     (println "Counted user!" (:team user) @usercounters)))
 
