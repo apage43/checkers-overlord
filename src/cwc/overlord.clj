@@ -133,7 +133,8 @@
     (println "Counted user!" (:team user) @usercounters)))
 
 (defn stream-watch []
-  (let [changes (str (urly/resolve (:db @cfg) "_changes"))
+  (try
+    (let [changes (str (urly/resolve (:db @cfg) "_changes"))
         last-seq (:seq @cfg 0)
         stream (:body (http/get (str changes)
                                 {:query-params {"feed" "continuous"
@@ -154,6 +155,9 @@
           (count-user (db-get id)))
         (when (and id (.startsWith id "vote:"))
           (tally-vote (db-get id))))))
+    (catch Exception e
+      (println "Error on changes feed connection:" (str e))
+      (Thread/sleep 10000)))
   (println "Changes feed dropped! Restarting... (at seq.." (:seq @cfg) ")")
   (recur))
 
@@ -184,8 +188,8 @@
       (System/exit 1))
     (swap! cfg assoc :db (if (.endsWith db-url "/") db-url (str db-url "/")))
     (swap! cfg assoc :interval interval)
-    (reset! votes-doc  {:game 0 :turn 0 :team 0 :count 0 :moves []})
     (start-new-game)
+    (reset! votes-doc  {:game 0 :turn 0 :team 0 :count 0 :moves []})
     (swap! game db-put (:game-docid @cfg))
     ;; Start watching the changes stream
     (.start (Thread. stream-watch))))
