@@ -102,6 +102,7 @@
   (reset! usercounters {:teams [0 0]})
   (reset! game (-> (data/initial-game 1 (:interval @cfg))
                    (assoc :votesDoc (:votes-docid @cfg))
+                   (assoc :channels ["game"])
                    (assoc :number (rand-int 999999))
                    data/affix-moves))
   (schedule-move apply-votes))
@@ -165,6 +166,7 @@
   (println "Updating vote totals")
   (swap! votes-doc merge
          {:game (:number @game)
+          :channels ["game"]
           :turn (:turn @game)
           :team (:activeTeam @game)
           :count (reduce + (vals @votes))
