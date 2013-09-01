@@ -81,7 +81,7 @@
       (println "Vote was for wrong turn or game."))))
 
 (defn schedule-move [f]
-  (at-/at (.getTime (:moveDeadline @game (Date.)))
+  (at-/at (+ 4000 (.getTime (:moveDeadline @game (Date.))))
           f pool :desc "Count votes and apply move"))
 
 (defn add-usercounters [game]
