@@ -151,7 +151,9 @@
         (when (and id (.startsWith id "game:")
                    (not (= id (:game-docid @cfg))))
           (db-kill change))
-
+        (when (and id (.startsWith id "votes:")
+                   (not (= id (:votes-docid @cfg))))
+          (db-kill change))
         (when (and id (.startsWith id "user:"))
           (count-user (db-get id)))
         (when (and id (.startsWith id "vote:"))
