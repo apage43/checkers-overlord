@@ -95,7 +95,7 @@
 (defn apply-move [game vote]
   (let [{:keys [team piece locations]} vote
         moverloc (-> game :teams (nth team) :pieces (nth piece) :location)
-        path (vec (concat [moverloc] locations))
+        path (vec locations)
         opponent-by-loc (piece-location-index game (opponent team))]
     (-> game vectify
         (assoc :moves (conj (:moves game) (assoc vote :locations path)))
