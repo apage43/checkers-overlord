@@ -15,12 +15,12 @@
 
 (def pool (at-/mk-pool))
 (def game (atom nil))
-(def cfg (atom {:seq 0}))
+(def cfg (atom {:seq 0
+                :game-docid "game:checkers"
+                :votes-docid "votes:checkers"}))
 (def votes (atom {}))
 (def votes-doc (atom {}))
 (def usercounters (atom {:teams [0 0]}))
-
-(defn make-gameid [] (str (UUID/randomUUID)))
 
 ;;; lifted from newer urly
 (defn ^String encode-path
@@ -92,9 +92,6 @@
 (declare apply-votes)
 
 (defn start-new-game []
-  (let [gameid (make-gameid)]
-    (swap! cfg assoc :game-docid (str "game:" gameid))
-    (swap! cfg assoc :votes-docid (str "votes:" gameid)))
   (remove-watch game ::store-db)
   (remove-watch votes-doc ::store-db)
   (ref->db game (:game-docid @cfg))
