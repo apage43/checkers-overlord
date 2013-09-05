@@ -9,6 +9,7 @@
                  [org.flatland/useful "0.10.3"]
                  [clojurewerkz/urly "1.0.0"]
                  [overtone/at-at "1.2.0"]
+                 [lonocloud/synthread "1.0.4"]
                  [clj-http "0.7.6"]
                  [clj-time "0.6.0"]
                  [cheshire "5.2.0"]])

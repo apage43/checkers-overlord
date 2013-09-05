@@ -5,6 +5,7 @@
             [clj-time.coerce :as tc]
             [clojure.set :as cs]
             [cheshire.generate :as jgen]
+            [lonocloud.synthread :as ->]
             [cheshire.core :as json]))
 
 (defn make-team [begin end]
@@ -93,56 +94,23 @@
         (assoc-in [:teams curteam :pieces] (vec new-pieces)))))
 
 (defn apply-move [game vote]
-  (let [{:keys [team piece locations]} vote
+  (let [{:keys [team piece] path :locations} vote
         moverloc (-> game :teams (nth team) :pieces (nth piece) :location)
-        path (vec locations)
         opponent-by-loc (piece-location-index game (opponent team))]
     (-> game vectify
-        (assoc :moves (conj (:moves game) (assoc vote :locations path)))
-        (assoc :activeTeam (opponent team))
-        (assoc :moveDeadline (tc/to-date (t/plus (t/now) (t/seconds (:moveInterval game)))))
-        (update-in [:turn] inc)
-        (as-> game
-          (reduce (fn [game captureloc]
-                    (if-let [opidx (opponent-by-loc captureloc)]
-                      (do
-                        (println team "captured" (opponent team) "piece" opidx "at" captureloc)
-                        (assoc-in game [:teams (opponent team)
-                                        :pieces opidx
-                                        :captured] true))
-                      (do (println "BAD JUMP" captureloc (opponent-by-loc captureloc))
-                          game)))
-                  game
-                  (rules/captures path)))
-        (assoc-in [:teams team :pieces piece :location] (last locations))
-        (as-> game
-          (if (kinged? team path)
-            (assoc-in game [:teams team :pieces piece :king] true)
-            game))
-        (update-in [:teams team :pieces] (partial mapv #(dissoc % :validMoves))))))
+        (->/in [:teams team :pieces]
+               (->/each (dissoc :validMoves))) ;; Remove old valid moves
+        (->/assoc :moves (conj vote) ;; Add the vote to the moves list
+                  :turn inc ;; Bump the turn number
+                  :moveDeadline (->/reset (-> (t/now) ;; Reset the deadline timer
+                                              (t/plus (t/seconds (:moveInterval game)))
+                                              (tc/to-date)))
+                  :activeTeam opponent) ;; The new activeTeam will be the old one's opponent
+        (->/in [:teams team :pieces piece]
+               (->/when (kinged? team path) (assoc :king true)) ;; Set the king flag if we landed in an end row
+               (assoc :location (last path))) ;; And actually move the piece
+        (->/for [cap (rules/captures path)] ;; Find each captured piece
+          (->/when-let [opidx (opponent-by-loc cap)] ;; and flag it as such
+            (->/aside _ (println "Captured piece" opidx "by path" path))
+            (assoc-in [:teams (opponent team) :pieces opidx :captured] true))))))
 
-(comment
-  (use 'clojure.pprint)
-  (use 'clojure.repl)
-  (pprint (initial-game 1 180))
-
-  (-> (initial-game 1 180)
-      pprint)
-
-  ;(def docurl "http://sync.couchbasecloud.com:4984/checkers/game-1")
-  (def docurl "http://localhost:4984/checkers/game-1")
-  (-> (initial-game 1 180)
-      ;(apply-move {:team 0 :piece 8 :locations [14]})
-      ;(apply-move {:team 1 :piece 2 :locations [18]})
-      ;(apply-move {:team 0 :piece 8 :locations [23]})
-      ;(apply-move {:team 1 :piece 6 :locations [18]})
-      affix-moves
-      (as-> doc
-        (http/put docurl
-                  {:body (json/generate-string
-                           (merge doc
-                                  (try {:_rev (-> docurl (http/get {:as :json}) :body :_rev)}
-                                       (catch Exception e nil))))
-                   :headers {"Content-Type" "application/json"}})))
-  (require '[clj-http.client :as http])
-  (println (slurp "game-sample.json")))
