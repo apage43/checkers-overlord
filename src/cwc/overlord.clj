@@ -47,7 +47,9 @@
                                               :body (json/generate-string doc)
                                               :headers {"Content-Type" "application/json"}}))]
             (assoc doc :_rev (:rev pres)))
-          (catch Exception _e nil))
+          (catch Exception e
+            (Thread/sleep 1000)
+            (println "Failed to update document" (str e))))
         (recur true))))
 
 (defn db-kill [change]
