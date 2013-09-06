@@ -15,7 +15,7 @@
 
 (def pool (at-/mk-pool))
 (def game (atom nil))
-(def cfg (atom {:seq 0
+(def cfg (atom {:seq "*:0"
                 :game-docid "game:checkers"
                 :votes-docid "votes:checkers"}))
 (def votes (atom {}))
@@ -135,14 +135,14 @@
 (defn stream-watch []
   (try
     (let [changes (str (urly/resolve (:db @cfg) "_changes"))
-        last-seq (:seq @cfg 0)
-        stream (:body (http/get (str changes)
-                                {:query-params {"feed" "continuous"
+        last-seq (:seq @cfg "*:0")
+        changeset (:body (http/get (str changes)
+                                {:query-params {"feed" "longpoll"
+                                                "timeout" "20000"
                                                 "since" last-seq}
-                                 :as :stream}))]
-    (doseq [line (line-seq (io/reader stream))]
-      (let [change (json/parse-string line true)
-            id (:id change)]
+                                 :as :json}))]
+    (doseq [change (:results changeset)]
+      (let [id (:id change)]
         (println "Got change:" (pr-str change))
         (swap! cfg assoc :seq (:seq change))
         ;; Delete old game docs
@@ -160,7 +160,7 @@
     (catch Exception e
       (println "Error on changes feed connection:" (str e))
       (Thread/sleep 10000)))
-  (println "Changes feed dropped! Restarting... (at seq.." (:seq @cfg) ")")
+  (println "Got change set! Restarting long poll... (at seq.." (pr-str (:seq @cfg)) ")")
   (recur))
 
 (defn votes-update []
