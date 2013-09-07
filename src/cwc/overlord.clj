@@ -13,6 +13,13 @@
             [clojurewerkz.urly.core :as urly]
             [clojure.tools.cli :refer [cli]]))
 
+(def userview-mapfunction "
+    function (doc, meta) {
+      if(meta.id.match(/^user:/)) {
+        emit([doc.game, doc.team]);
+      }
+    }")
+
 (def pool (at-/mk-pool))
 (def game (atom nil))
 (def cfg (atom {:seq "*:0"
@@ -127,7 +134,8 @@
 
 (defn count-user [user]
   (println "Saw user doc: " (pr-str user))
-  (when (and (some-> user :team number?)
+  (when (and (not (@cfg :userview))
+             (some-> user :team number?)
              (= (:number @game) (some-> user :game)))
     (swap! usercounters update-in [:teams (:team user)] (fnil inc 0))
     (println "Counted user!" (:team user) @usercounters)))
@@ -177,20 +185,43 @@
                                 (-> @game (data/apply-move vote) :moves last)
                                 :count votecount))))}))
 
+
+(defn grab-user-counts []
+  (rescue
+    (let [gamenum (:number @game)
+          {:keys [userview]} @cfg
+          start [gamenum]
+          end [gamenum {}]
+          result (:body (http/get userview {:as :json
+                                            :query-params {:startkey (json/generate-string start)
+                                                           :endkey (json/generate-string end)
+                                                           :group true}}))
+          counts (into {} (-> result :rows (->> (map (juxt (comp second :key) :value)))))]
+      (swap! usercounters (fn [current]
+                            (-> current
+                                (assoc-in [:teams 0] (counts 0 0))
+                                (assoc-in [:teams 1] (counts 1 0))))))
+    nil))
+
 (defn -main [& args]
   (let [[opts args usage]
         (cli args
              ["-d" "--db-url" "Database URL"]
+             ["-q" "--user-view-url" "User Count View URL"
+              :default "http://mango.hq.couchbase.com:8092/checkers/_design/checkers/_view/users"]
              ["-i" "--interval" "Seconds per turn"
               :parse-fn read-string :default 30]
              ["-h" "--help" "Show this message"
               :flag true])
-        {:keys [help db-url interval]} opts]
+        {:keys [help db-url interval user-view-url]} opts]
     (when (or help (not db-url))
       (println usage)
       (System/exit 1))
     (swap! cfg assoc :db (if (.endsWith db-url "/") db-url (str db-url "/")))
     (swap! cfg assoc :interval interval)
+    (when user-view-url
+      (swap! cfg assoc :userview user-view-url)
+      (at-/every 10000 grab-user-counts pool :desc "Grab user counts from view"))
     (start-new-game)
     (reset! votes-doc  {:game 0 :turn 0 :team 0 :count 0 :moves []})
     (swap! game db-put (:game-docid @cfg))
