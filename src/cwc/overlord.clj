@@ -23,6 +23,7 @@
 (def pool (at-/mk-pool))
 (def game (atom nil))
 (def cfg (atom {:seq "*:0"
+                :auth ["overlord" "theoverlord"]
                 :game-docid "game:checkers"
                 :votes-docid "votes:checkers"}))
 (def votes (atom {}))
@@ -41,7 +42,7 @@
     (let [docuri (str (urly/resolve (:db @cfg) (encode-path k)))]
       (println "Grab:" docuri)
       (some-> docuri str
-              (http/get {:as :json})
+              (http/get {:basic-auth (:auth @cfg) :as :json})
               :body))
     nil))
 
@@ -51,6 +52,7 @@
           (let [docuri (str (urly/resolve (:db @cfg) (encode-path k)))
                 doc (if-not getrev doc (assoc doc :_rev (:_rev (db-get k) "")))
                 pres (:body (http/put docuri {:as :json
+                                              :basic-auth (:auth @cfg)
                                               :body (json/generate-string doc)
                                               :headers {"Content-Type" "application/json"}}))]
             (assoc doc :_rev (:rev pres)))
@@ -66,7 +68,7 @@
           docuri (str (urly/resolve (:db @cfg) (encode-path id)))]
       ;; Don't delete already deleted docs
       (when-not deleted
-        (http/delete docuri {:query-params {:rev rev}}))) nil))
+        (http/delete docuri {:basic-auth (:auth @cfg) :query-params {:rev rev}}))) nil))
 
 (defn ref->db [theref id]
   (add-watch theref ::store-db
@@ -148,6 +150,7 @@
                                 {:query-params {"feed" "longpoll"
                                                 "timeout" "20000"
                                                 "since" last-seq}
+                                 :basic-auth (:auth @cfg)
                                  :as :json}))]
     (doseq [change (:results changeset)]
       (let [id (:id change)]
