@@ -1,0 +1,21 @@
+{
+    "adminInterface": ":4985",
+    "databases": {
+        "checkers": {
+            "server":"http://mango.hq.couchbase.com:8091/",
+            "bucket":"checkers",
+            "RevsLimit": 1,
+            "users": {
+                "GUEST": {"disabled": false, "admin_channels": ["*"]}
+            },
+	    "sync": `
+		function(doc) {
+		  if(doc._id.match(/^game:/) || doc._id.match(/^votes:/)) {
+		      requireUser("overlord");
+		  }
+		  channel(doc.channels);
+		}
+	    `
+        }
+    }
+}
