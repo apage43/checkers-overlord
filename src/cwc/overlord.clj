@@ -29,6 +29,7 @@
 (def votes (atom {}))
 (def votes-doc (atom {}))
 (def usercounters (atom {:teams [0 0]}))
+(def next-move (atom nil))
 
 ;;; lifted from newer urly
 (defn ^String encode-path
@@ -113,7 +114,7 @@
                    (assoc :channels ["game"])
                    (assoc :number (rand-int 999999))
                    data/affix-moves))
-  (schedule-move apply-votes))
+  (reset! next-move (schedule-move apply-votes)))
 
 (defn apply-votes []
   (println "Time's up, applying votes!")
@@ -129,7 +130,7 @@
         (swap! game assoc :moveDeadline
                (tc/to-date (t/plus (t/now) (t/seconds (:moveInterval @game)))))))
   (if-not (:winningTeam @game)
-    (schedule-move apply-votes)
+    (reset! next-move (schedule-move apply-votes))
     ;; Wait one round-length, and restart
     (schedule-move start-new-game)))
 
@@ -176,17 +177,23 @@
 
 (defn votes-update []
   (println "Updating vote totals")
-  (swap! votes-doc merge
+  (let [total (reduce + (vals @votes))
+        curteam (:activeTeam @game)]
+   (swap! votes-doc merge
          {:game (:number @game)
           :channels ["game"]
           :turn (:turn @game)
-          :team (:activeTeam @game)
-          :count (reduce + (vals @votes))
+          :team curteam
+          :count total
           :moves (->> @votes (sort-by val) reverse (take 3)
                       (map (fn [[vote votecount]]
                               (assoc
                                 (-> @game (data/apply-move vote) :moves last)
-                                :count votecount))))}))
+                                :count votecount))))})
+    ;; If all votes are in, end the turn (and cancel the outstanding task)
+    (when (and (pos? total) (= total (-> @usercounters :teams (nth curteam 0))))
+        (swap! next-move (fn [m] (when m (at-/stop m)) nil))
+      (apply-votes))))
 
 
 (defn grab-user-counts []
