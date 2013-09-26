@@ -23,6 +23,7 @@
 (def pool (at-/mk-pool))
 (def game (atom nil))
 (def cfg (atom {:seq "*:0"
+                :autoCommit false
                 :auth ["overlord" "theoverlord"]
                 :game-docid "game:checkers"
                 :votes-docid "votes:checkers"}))
@@ -191,7 +192,9 @@
                                 (-> @game (data/apply-move vote) :moves last)
                                 :count votecount))))})
     ;; If all votes are in, end the turn (and cancel the outstanding task)
-    (when (and (pos? total) (= total (-> @usercounters :teams (nth curteam 0))))
+    (when (and (:autoCommit @cfg)
+               (pos? total)
+               (= total (-> @usercounters :teams (nth curteam 0))))
         (swap! next-move (fn [m] (when m (at-/stop m)) nil))
       (apply-votes))))
 
@@ -221,14 +224,17 @@
               :default "http://mango.hq.couchbase.com:8092/checkers/_design/checkers/_view/users"]
              ["-i" "--interval" "Seconds per turn"
               :parse-fn read-string :default 30]
+             ["-a" "--auto-commit" "Auto commit turn when votes are in?"
+              :flag true :default false]
              ["-h" "--help" "Show this message"
               :flag true])
-        {:keys [help db-url interval user-view-url]} opts]
+        {:keys [help db-url interval user-view-url auto-commit]} opts]
     (when (or help (not db-url))
       (println usage)
       (System/exit 1))
     (swap! cfg assoc :db (if (.endsWith db-url "/") db-url (str db-url "/")))
     (swap! cfg assoc :interval interval)
+    (swap! cfg assoc :autoCommit auto-commit)
     (when user-view-url
       (swap! cfg assoc :userview user-view-url)
       (at-/every 10000 grab-user-counts pool :desc "Grab user counts from view"))
