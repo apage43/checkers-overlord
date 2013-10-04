@@ -35,6 +35,17 @@ something more palatable, then:
 
     java -jar cwc-overlord.jar -d http://syncgateway:4984/checkers/
 
+### Switches
+
+ Switches                             Default              Desc
+ --------                             -------              ----
+ -d, --db-url                                              Database URL
+ -q, --user-view-url                                       User Count View URL
+ -i, --interval                       30                   Seconds per turn
+ -a, --no-auto-commit, --auto-commit  false                Auto commit turn when votes are in?
+ -h, --no-help, --help                false                Show this message
+
+
 ### Prebuilt jar
 
 may or may not be up to date:
