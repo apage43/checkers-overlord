@@ -11,4 +11,6 @@
                  [overtone/at-at "1.2.0"]
                  [clj-http "0.7.6"]
                  [clj-time "0.6.0"]
+                 [aleph "0.3.0"]
+                 [compojure "1.1.5"]
                  [cheshire "5.2.0"]])

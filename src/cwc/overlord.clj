@@ -5,13 +5,18 @@
   (:require [clj-http.client :as http]
             [flatland.useful.exception :refer [rescue]]
             [cheshire.core :as json]
+            [compojure.core :refer :all]
+            [ring.util.response :as response]
             [clj-time.core :as t]
             [clj-time.coerce :as tc]
             [clojure.java.io :as io]
             [overtone.at-at :as at-]
             [cwc.game :as data]
             [clojurewerkz.urly.core :as urly]
-            [clojure.tools.cli :refer [cli]]))
+            [clojure.tools.cli :refer [cli]]
+            [aleph.http :refer [start-http-server
+                                wrap-aleph-handler
+                                wrap-ring-handler]]))
 
 (def userview-mapfunction "
     function (doc, meta) {
@@ -19,6 +24,12 @@
         emit([doc.game, doc.team]);
       }
     }")
+
+(defn json-response
+  "Transform `obj` to JSON and create a ring response object of it."
+  [obj]
+  (-> (response/response (json/generate-string obj))
+      (response/content-type "application/json; charset=utf-8")))
 
 (def pool (at-/mk-pool))
 (def game (atom nil))
@@ -216,6 +227,14 @@
                                 (assoc-in [:teams 1] (counts 1 0))))))
     nil))
 
+(defroutes api
+  (GET "/" {} (json-response {:overlord "checkers"}))
+  (POST "/new-game" {}
+        ;; kill any outstanding scheduled task for the current game
+        (swap! next-move (fn [m] (when m (at-/stop m)) nil))
+        (start-new-game)
+        (json-response {:status "ok" :game-id (:game-docid @cfg)})))
+
 (defn -main [& args]
   (let [[opts args usage]
         (cli args
@@ -226,9 +245,11 @@
               :parse-fn read-string :default 30]
              ["-a" "--auto-commit" "Auto commit turn when votes are in?"
               :flag true :default false]
+             ["-c" "--control-port" "Port to run control API on"
+              :default 16888]
              ["-h" "--help" "Show this message"
               :flag true])
-        {:keys [help db-url interval user-view-url auto-commit]} opts]
+        {:keys [help db-url interval user-view-url auto-commit control-port]} opts]
     (when (or help (not db-url))
       (println usage)
       (System/exit 1))
@@ -241,5 +262,7 @@
     (start-new-game)
     (reset! votes-doc  {:game 0 :turn 0 :team 0 :count 0 :moves []})
     (swap! game db-put (:game-docid @cfg))
+    (swap! cfg assoc :api-server (-> #'api wrap-ring-handler
+                                     (start-http-server {:port control-port})))
     ;; Start watching the changes stream
     (.start (Thread. stream-watch))))
