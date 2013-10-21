@@ -116,6 +116,7 @@
 (declare apply-votes)
 
 (defn start-new-game []
+  (println "Starting new game.")
   (remove-watch game ::store-db)
   (remove-watch votes-doc ::store-db)
   (ref->db game (:game-docid @cfg))
@@ -126,6 +127,8 @@
                    (assoc :channels ["game"])
                    (assoc :number (rand-int 999999))
                    data/affix-moves))
+  ; silly hack - swap with itself to trigger watch
+  (swap! game identity)
   (reset! next-move (schedule-move apply-votes)))
 
 (defn apply-votes []
@@ -144,7 +147,7 @@
   (if-not (:winningTeam @game)
     (reset! next-move (schedule-move apply-votes))
     ;; Wait one round-length, and restart
-    (schedule-move start-new-game)))
+    (start-new-game)))
 
 
 (defn count-user [user]
