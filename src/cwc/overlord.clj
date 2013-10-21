@@ -204,8 +204,8 @@
                                 :count votecount))))})
     ;; If all votes are in, end the turn (and cancel the outstanding task)
     (when (and (:autoCommit @cfg)
-               (pos? total)
-               (= total (-> @usercounters :teams (nth curteam 0))))
+               (pos? total))
+               ; (= total (-> @usercounters :teams (nth curteam 0))))
         (swap! next-move (fn [m] (when m (at-/stop m)) nil))
       (apply-votes))))
 
