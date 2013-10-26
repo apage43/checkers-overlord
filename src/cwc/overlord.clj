@@ -18,6 +18,8 @@
                                 wrap-aleph-handler
                                 wrap-ring-handler]]))
 
+(defn now [] (new java.util.Date))
+
 (def userview-mapfunction "
     function (doc, meta) {
       if(meta.id.match(/^user:/)) {
@@ -53,7 +55,7 @@
 (defn db-get [k]
   (rescue
     (let [docuri (str (urly/resolve (:db @cfg) (encode-path k)))]
-      (println "Grab:" docuri)
+      (println (now) "Grab:" docuri)
       (some-> docuri str
               (http/get {:basic-auth (:auth @cfg) :as :json})
               :body))
@@ -70,8 +72,8 @@
                                               :headers {"Content-Type" "application/json"}}))]
             (assoc doc :_rev (:rev pres)))
           (catch Exception e
-            (Thread/sleep 1000)
-            (println "Failed to update document" (str e))))
+            (Thread/sleep 100)
+            (println (now) "Failed to update document" (str e))))
         (recur true))))
 
 (defn db-kill [change]
@@ -88,21 +90,21 @@
              (fn [_key theref oldv newv]
                ;; Update did not change rev
                (when (= (:_rev oldv) (:_rev newv))
-                 (println "Sending new state for" id)
+                 (println (now) "Sending new state for" id)
                  (swap! theref db-put id)))))
 
 (declare votes-update)
 
 (defn tally-vote [vote]
-  (println "Considering vote:" (pr-str vote))
+  (println (now) "Considering vote:" (pr-str vote))
   (let [votepart (select-keys vote [:game :locations :piece :team :turn])
         {:keys [locations piece team turn]} vote]
     (if (and (= (:number @game) (:game vote))
              (= (:turn @game) turn))
-      (do (println "Vote is OK, counting")
+      (do (println (now) "Vote is OK, counting")
           (swap! votes (fn [m] (merge-with + m {votepart 1})))
           (votes-update))
-      (println "Vote was for wrong turn or game."))))
+      (println (now) "Vote was for wrong turn or game."))))
 
 (defn schedule-move [f]
   (at-/at (+ 4000 (.getTime (:moveDeadline @game (Date.))))
@@ -116,7 +118,7 @@
 (declare apply-votes)
 
 (defn start-new-game []
-  (println "Starting new game.")
+  (println (now) "Starting new game.")
   (remove-watch game ::store-db)
   (remove-watch votes-doc ::store-db)
   (ref->db game (:game-docid @cfg))
@@ -156,12 +158,12 @@
 
 
 (defn count-user [user]
-  (println "Saw user doc: " (pr-str user))
+  (println (now) "Saw user doc: " (pr-str user))
   (when (and (not (@cfg :userview))
              (some-> user :team number?)
              (= (:number @game) (some-> user :game)))
     (swap! usercounters update-in [:teams (:team user)] (fnil inc 0))
-    (println "Counted user!" (:team user) @usercounters)))
+    (println (now) "Counted user!" (:team user) @usercounters)))
 
 (defn stream-watch []
   (try
@@ -175,7 +177,7 @@
                                  :as :json}))]
     (doseq [change (:results changeset)]
       (let [id (:id change)]
-        (println "Got change:" (pr-str change))
+        (println (now) "Got change:" (pr-str change))
         (swap! cfg assoc :seq (:seq change))
         ;; Delete old game docs
         (when (= id "game-1") (db-kill change))
@@ -190,13 +192,13 @@
         (when (and id (.startsWith id "vote:"))
           (tally-vote (db-get id))))))
     (catch Exception e
-      (println "Error on changes feed connection:" (str e))
-      (Thread/sleep 10000)))
-  (println "Got change set! Restarting long poll... (at seq.." (pr-str (:seq @cfg)) ")")
+      (println (now) "Error on changes feed connection:" (str e))
+      (Thread/sleep 1000)))
+  (println (now) "Got change set! Restarting long poll... (at seq.." (pr-str (:seq @cfg)) ")")
   (recur))
 
 (defn votes-update []
-  (println "Updating vote totals")
+  (println (now) "Updating vote totals")
   (let [total (reduce + (vals @votes))
         curteam (:activeTeam @game)]
    (swap! votes-doc merge
