@@ -259,9 +259,6 @@
     (swap! cfg assoc :db (if (.endsWith db-url "/") db-url (str db-url "/")))
     (swap! cfg assoc :interval interval)
     (swap! cfg assoc :autoCommit auto-commit)
-    (when user-view-url
-      (swap! cfg assoc :userview user-view-url)
-      (at-/every 10000 grab-user-counts pool :desc "Grab user counts from view"))
     (start-new-game)
     (reset! votes-doc  {:game 0 :turn 0 :team 0 :count 0 :moves []})
     (swap! game db-put (:game-docid @cfg))
