@@ -132,18 +132,23 @@
   (reset! next-move (schedule-move apply-votes)))
 
 (defn apply-votes []
-  (println "Time's up, applying votes!")
+  (println (now) "Time's up, applying votes!")
   (if-let [most-pop (some->> @votes (sort-by val) last key)]
-    (do (println "Most popular vote was:" (pr-str most-pop))
+    (do (println (now) "Most popular vote was:" (pr-str most-pop))
         (reset! votes {})
         (swap! game (fn [g] (-> g
                                 add-usercounters
                                 (data/apply-move most-pop)
                                 (data/affix-moves)))))
     ;else
-    (do (println "No votes were cast! Resetting timer.")
+    (do (println (now) "No votes were cast! Resetting timer.")
         (swap! game assoc :moveDeadline
                (tc/to-date (t/plus (t/now) (t/seconds (:moveInterval @game)))))))
+
+  ; cap the number of moves at 500.  after that, arbitrarily pick red (team 0) as winner
+  (if (and (> (:turn @game) 500) (not (:winningTeam @game)))
+    (swap! game assoc :winningTeam 0))
+
   (if-not (:winningTeam @game)
     (reset! next-move (schedule-move apply-votes))
     ;; Wait one round-length, and restart
