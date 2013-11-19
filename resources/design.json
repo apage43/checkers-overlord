@@ -1,1 +1,0 @@
-{"views":{"users":{"map":"function (doc, meta) {\n  if(meta.id.match(/^user:/)) {\n    emit([doc.game, doc.team]);\n  }\n}","reduce":"_count"}}}
