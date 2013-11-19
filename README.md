@@ -18,6 +18,21 @@ Requires [Leiningen](https://github.com/technomancy/leiningen)
 
 Creates a file in `target/` ending in `-standalone.jar`
 
+## Pre-requisites
+
+* Run sync gateway with config.json (under resources)
+
+* Create a couchbase bucket named "checkers"
+
+* Run a few curl commands
+
+```
+echo Setting up overlord user...
+curl -X PUT -H 'Content-Type: application/json' http://localhost:4985/checkers/_user/overlord -d '{"name":"overlord","password":"theoverlord","admin_channels":["*"]}'
+echo Installing user count view...
+curl -X PUT -H 'Content-Type: application/json' http://localhost:8092/checkers/_design/checkers -d @design.json
+```
+
 ## Running
 
 ### From source
@@ -37,6 +52,7 @@ something more palatable, then:
 
 ### Switches
 
+```
  Switches                             Default              Desc
  --------                             -------              ----
  -d, --db-url                                              Database URL
@@ -44,7 +60,7 @@ something more palatable, then:
  -i, --interval                       30                   Seconds per turn
  -a, --no-auto-commit, --auto-commit  false                Auto commit turn when votes are in?
  -h, --no-help, --help                false                Show this message
-
+```
 
 ### Prebuilt jar
 
